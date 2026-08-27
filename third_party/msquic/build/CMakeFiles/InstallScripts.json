@@ -1,0 +1,12 @@
+{
+	"InstallScripts" : 
+	[
+		"C:/Users/Admin/Desktop/SecureTunnelCpp/third_party/msquic/build/cmake_install.cmake",
+		"C:/Users/Admin/Desktop/SecureTunnelCpp/third_party/msquic/build/src/inc/cmake_install.cmake",
+		"C:/Users/Admin/Desktop/SecureTunnelCpp/third_party/msquic/build/src/generated/cmake_install.cmake",
+		"C:/Users/Admin/Desktop/SecureTunnelCpp/third_party/msquic/build/src/core/cmake_install.cmake",
+		"C:/Users/Admin/Desktop/SecureTunnelCpp/third_party/msquic/build/src/platform/cmake_install.cmake",
+		"C:/Users/Admin/Desktop/SecureTunnelCpp/third_party/msquic/build/src/bin/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

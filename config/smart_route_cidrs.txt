@@ -1,0 +1,14 @@
+# Smart mode: CIDR prefixes routed through VPN (major foreign cloud ranges)
+# Format: network/prefix  e.g. 142.250.0.0/15
+
+# Google
+142.250.0.0/15
+172.217.0.0/16
+216.58.0.0/16
+
+# Meta
+31.13.64.0/18
+157.240.0.0/16
+
+# Cloudflare CDN
+104.16.0.0/12

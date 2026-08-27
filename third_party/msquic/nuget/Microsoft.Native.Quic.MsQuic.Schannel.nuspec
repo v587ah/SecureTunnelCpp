@@ -1,0 +1,19 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2011/08/nuspec.xsd">
+  <metadata>
+    <id>Microsoft.Native.Quic.MsQuic.Schannel</id>
+    <version>2.6.0+154820802</version>
+    <title>MsQuic (Schannel)</title>
+    <authors>Microsoft</authors>
+    <requireLicenseAcceptance>true</requireLicenseAcceptance>
+    <license type="expression">MIT</license>
+    <licenseUrl>https://licenses.nuget.org/MIT</licenseUrl>
+    <icon>pkgicon.png</icon>
+    <readme>README.md</readme>
+    <projectUrl>https://github.com/microsoft/msquic</projectUrl>
+    <description>MsQuic native library for x64, x86 and arm64 using schannel for TLS</description>
+    <copyright>© Microsoft Corporation. All rights reserved.</copyright>
+    <tags>native quic msquic schannel</tags>
+    <repository type="git" url="https://microsoft.visualstudio.com/undock/_git/msquic" commit="a5d0a855d4f2bff5f293b8fd2f031562249d81e3" />
+  </metadata>
+</package>

@@ -1,0 +1,36 @@
+#!/usr/sbin/nft -f
+# 静态 nftables 规则示例（需按环境修改变量后使用）
+# 推荐优先使用 scripts/apply-nat.sh（自动读取 /etc/sectunnel/sectunnel.env）
+
+flush table ip sectunnel
+
+table ip sectunnel {
+    # 变量：部署前请替换
+    # WAN  = eth0
+    # TUN  = sectun0
+    # NET  = 10.66.66.0/24
+    # PORT = 44333
+
+    chain input {
+        type filter hook input priority filter; policy drop;
+
+        iif "lo" accept
+        ct state established,related accept
+        tcp dport 22 accept
+        udp dport 44333 accept
+        icmp type echo-request accept
+    }
+
+    chain forward {
+        type filter hook forward priority filter; policy drop;
+
+        iifname "sectun0" oifname "eth0" accept
+        iifname "eth0" oifname "sectun0" ct state established,related accept
+    }
+
+    chain postrouting {
+        type nat hook postrouting priority srcnat; policy accept;
+
+        ip saddr 10.66.66.0/24 oifname "eth0" masquerade
+    }
+}

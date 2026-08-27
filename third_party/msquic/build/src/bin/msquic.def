@@ -1,0 +1,5 @@
+LIBRARY msquic
+
+EXPORTS
+    MsQuicOpenVersion
+    MsQuicClose

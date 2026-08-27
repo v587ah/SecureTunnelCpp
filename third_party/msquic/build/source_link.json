@@ -1,0 +1,9 @@
+{
+"documents": {
+"C:\\Users\\Admin\\Desktop\\SecureTunnelCpp\\third_party\\msquic\\src\\*" : "https://raw.githubusercontent.com/microsoft/msquic/e7e7a114e20a55ec2d5f723cf6bdf3bfb7b0b24a/*",
+"C:\\Users\\Admin\\Desktop\\SecureTunnelCpp\\third_party\\msquic\\src\\submodules\\clog\\*" : "https://raw.githubusercontent.com/microsoft/CLOG/6a08c15cccbd9129d64732cd017828c5715825f7/*",
+"C:\\Users\\Admin\\Desktop\\SecureTunnelCpp\\third_party\\msquic\\src\\submodules\\googletest\\*" : "https://raw.githubusercontent.com/google/googletest/fa005b296f90faec4f352d7ab382287bf6548c8d/*",
+"C:\\Users\\Admin\\Desktop\\SecureTunnelCpp\\third_party\\msquic\\src\\submodules\\xdp-for-windows\\*" : "https://raw.githubusercontent.com/microsoft/xdp-for-windows/d372b52577a724e04fa4c06acb90bbfa4719fc25/*"
+}
+}
+
