@@ -1,125 +1,252 @@
 # SecureTunnelCpp
 
-一个面向学习和后续工程化的 C++20 安全隧道骨架。当前版本只完成模块边界、配置校验和连接状态机，**不会接管真实流量，也没有自制加密算法**。
+**C++20 安全隧道 / VPN 框架** — QUIC/TLS 1.3 传输、Wintun 虚拟网卡、智能分流与全局路由。
 
-## 设计目标
+> 使用 MsQuic、Wintun 等成熟组件，**不自行实现密码原语**。适合学习、二次开发与 Windows 客户端集成（C# / Flutter）。
 
-- 低延迟：数据面优先 QUIC/UDP，避免 TCP-over-TCP。
-- 高吞吐：后续通过 Wintun 环形缓冲、批量收发和少拷贝优化。
-- 安全：使用成熟库实现 TLS 1.3、Noise 或 WireGuard，不自行实现密码原语。
-- 可测试：虚拟网卡、传输和引擎通过接口隔离。
-- 权限最小化：未来让高权限隧道服务与普通权限 UI 分进程运行。
+---
 
-## 当前结构
+## 功能概览
+
+| 功能 | Windows 客户端 | Windows 服务端 | Linux 服务端 |
+|------|:--------------:|:--------------:|:------------:|
+| QUIC/TLS 1.3（MsQuic） | ✅ | ✅ | ⚠️ 需自行集成 MsQuic |
+| Wintun 虚拟网卡 | ✅ | — | — |
+| Linux TUN（`/dev/net/tun`） | — | — | ✅ |
+| 数据面 Relay | ✅ | ✅ | ✅ |
+| **智能分流**（`--smart-route`） | ✅ | — | — |
+| **全局路由**（`--global-route`） | ✅ | — | — |
+| nftables NAT 脚本 | — | — | ✅ |
+| systemd 部署 | — | — | ✅ |
+
+### VPN 两种模式（Windows 客户端）
+
+| 模式 | 参数 | 行为 |
+|------|------|------|
+| **智能模式** | `--smart-route` | 国内直连；名单内国外/被墙域名与 CIDR 走隧道 |
+| **全局模式** | `--global-route` | 全部流量经隧道（`0.0.0.0/0 → 10.66.66.1`） |
+
+默认隧道网段：`10.66.66.0/24`（客户端 `10.66.66.2`，网关 `10.66.66.1`）。
+
+---
+
+## 技术栈
+
+| 层次 | 技术 | 说明 |
+|------|------|------|
+| 语言 | **C++20** | CMake 3.21+，MSVC / GCC / Clang |
+| 外层传输 | **[MsQuic](https://github.com/microsoft/msquic)** | QUIC + TLS 1.3（Windows 通过 NuGet 预编译包） |
+| TLS（Windows） | **Schannel** | 证书存储 / PEM，由 MsQuic 调用 |
+| 虚拟网卡（Windows） | **[Wintun](https://www.wintun.net/)** | WireGuard 官方用户态 TUN |
+| 虚拟网卡（Linux） | **`/dev/net/tun`** | `LinuxTunVirtualInterface` |
+| 内层封装 | **AES-GCM（BCrypt）** 或开发模式 | QUIC 之上的 AEAD 帧；空 PSK 时为开发透传 |
+| 路由（Windows） | **IP Helper API** | 接口 IP/DNS、旁路路由、前缀路由、默认路由 |
+| NAT（Linux） | **nftables** | MASQUERADE + 转发规则 |
+| 进程管理 | **systemd** | `sectunnel-server.service` |
+| 集成示例 | **C# / Flutter** | 进程方式启动 `tunnel_client.exe` |
+
+### 架构
+
+```text
+┌─────────────────────────────────────────────────────────┐
+│  Windows Client                                         │
+│  tunnel_client.exe                                      │
+│    ├─ WintunVirtualInterface (10.66.66.2)               │
+│    ├─ SmartRouteManager / Global Route                  │
+│    ├─ InnerSession (AEAD)                               │
+│    └─ QuicSecureTransport ──UDP 44333──┐                │
+└────────────────────────────────────────│────────────────┘
+                                         ▼
+┌─────────────────────────────────────────────────────────┐
+│  Server (Windows / Linux)                               │
+│  tunnel_server.exe                                      │
+│    ├─ QuicSecureTransport (Listener)                    │
+│    ├─ InnerSession (AEAD)                               │
+│    ├─ VirtualInterface (dev / Linux TUN)                │
+│    └─ TunnelEngine relay                                │
+│         └─ Linux: sectun0 + nftables NAT → WAN           │
+└─────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 快速开始（Windows 本机）
+
+### 1. 构建
+
+```powershell
+# 需要 Visual Studio 2022+（含 C++ 桌面开发）、CMake、Ninja
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+```
+
+构建产物：`build/tunnel_client.exe`、`build/tunnel_server.exe`（自动复制 `msquic.dll`、`wintun.dll`）。
+
+开发证书（首次）：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/gen_dev_cert.ps1
+```
+
+### 2. 启动（两个窗口）
+
+**Server：**
+
+```text
+scripts\run_server.bat
+```
+
+**Client（管理员 — 智能 VPN）：**
+
+```text
+scripts\run_client_wintun_smart.bat
+```
+
+或全局 VPN：`scripts\run_client_wintun_global.bat`
+
+### 3. 验证 Wintun
+
+```text
+scripts\verify_wintun.vbs     ← 双击，自动检测网卡
+```
+
+---
+
+## 命令行参考
+
+### 客户端 `tunnel_client.exe`
+
+| 参数 | 说明 |
+|------|------|
+| `--quic` | 启用 QUIC/TLS 1.3（生产必选） |
+| `--wintun` | Wintun 虚拟网卡（**需管理员**） |
+| `--smart-route` | 智能分流（与 `--global-route` 互斥） |
+| `--global-route` | 全局默认路由（**需管理员**） |
+| `--relay` | 运行数据面 relay |
+| `--relay-seconds:N` | relay 持续 N 秒 |
+| `--insecure` | 跳过证书校验（**仅 localhost**） |
+| `--endpoint:<host>` | 服务器地址，默认 `127.0.0.1` |
+| `--port:<port>` | UDP 端口，默认 `44333` |
+| `--smart-domains:<file>` | 智能分流域名列表 |
+| `--smart-cidrs:<file>` | 智能分流 CIDR 列表 |
+
+**示例：**
+
+```powershell
+# 本机开发
+.\build\tunnel_client.exe --quic --insecure --wintun --smart-route
+
+# 远程生产（需导入服务端证书，不要用 --insecure）
+.\build\tunnel_client.exe --quic --wintun --smart-route --endpoint:203.0.113.10 --port:44333
+```
+
+### 服务端 `tunnel_server.exe`
+
+| 参数 | 说明 |
+|------|------|
+| `--quic` | QUIC/TLS 监听（UDP 44333） |
+| `--relay` | 持续数据面 relay |
+| `--tun` | Linux TUN 网卡（Linux 专用） |
+| `--cert_hash:<hex>` | Windows 证书存储 SHA1 指纹 |
+| `--cert_file:<path>` | Linux PEM 证书 |
+| `--key_file:<path>` | Linux PEM 私钥 |
+
+---
+
+## 项目结构
 
 ```text
 SecureTunnelCpp/
-├─ apps/
-│  ├─ client_main.cpp       客户端演示入口（可选 --wintun）
-│  ├─ server_main.cpp       服务端演示入口
-│  └─ wintun_probe.cpp      Wintun 探测工具（需管理员）
-├─ include/tunnel/
-│  ├─ config.hpp
-│  ├─ session.hpp
-│  ├─ tunnel_engine.hpp
-│  ├─ development_adapters.hpp
-│  ├─ wintun_loader.hpp
-│  ├─ wintun_virtual_interface.hpp
-│  └─ windows_net_config.hpp  接口 IPv4/DNS（无全局路由）
-├─ src/
-├─ tests/
-│  ├─ session_tests.cpp
-│  └─ wintun_loader_tests.cpp
-├─ third_party/wintun/      官方 Wintun 0.14.1
-├─ docs/ARCHITECTURE.md
-└─ CMakeLists.txt
+├─ apps/                    # client_main, server_main, wintun_probe
+├─ include/tunnel/          # 公共头文件
+├─ src/                     # 核心实现
+│  ├─ quic_secure_transport.cpp
+│  ├─ wintun_virtual_interface.cpp
+│  ├─ smart_route_manager.cpp
+│  ├─ windows_net_config.cpp
+│  └─ linux_tun_virtual_interface.cpp
+├─ config/                  # 智能分流默认名单
+│  ├─ smart_route_domains.txt
+│  └─ smart_route_cidrs.txt
+├─ scripts/                 # Windows 启动与验证脚本
+├─ deploy/linux/            # Linux NAT / TUN / systemd
+├─ docs/                    # 详细教程
+├─ examples/                # C# / Flutter 集成示例
+├─ tests/                   # 单元测试
+└─ third_party/
+   ├─ wintun/               # Wintun DLL + 头文件
+   └─ msquic/nuget/         # MsQuic Windows 预编译包
 ```
 
-## 模块作用
+---
 
-### `VirtualInterface`
+## 文档
 
-屏蔽操作系统差异：
+| 文档 | 内容 |
+|------|------|
+| [docs/USAGE_TUTORIAL.md](docs/USAGE_TUTORIAL.md) | 完整使用教程、场景分步、C#/Flutter 集成 |
+| [docs/REMOTE_CONNECT.md](docs/REMOTE_CONNECT.md) | 远程对接、证书导入、Windows/Linux 服务端选择 |
+| [docs/LINUX_SERVER_DEPLOY.md](docs/LINUX_SERVER_DEPLOY.md) | Linux VPS：编译、NAT、systemd |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 模块设计与状态机 |
 
-- Windows：`WintunVirtualInterface`（已实现生命周期与读写）
-- 开发：`DevelopmentVirtualInterface`（回环，无需管理员）
-- Linux：后续 `/dev/net/tun`
+---
 
-### `WintunLoader`
-
-只负责加载 DLL 与解析导出符号。
-
-### `WindowsNetConfigurator`
-
-给 Wintun 适配器配置 IPv4 与接口 DNS。  
-全局默认路由通过 `--global-route` 显式开启（需 QUIC 握手完成后才应用）。
-
-### `SecureTransport`
-
-屏蔽底层传输和加密实现。生产版本建议：
-
-- 外层：MsQuic（QUIC + TLS 1.3）
-- 内层：WireGuard 或经过审计的 Noise 实现
-- 密码原语：BoringSSL、OpenSSL 3 或 libsodium
-
-开发适配器没有密码学能力，不能用于生产。
-
-### `TunnelEngine`
-
-协调配置、网卡、传输和会话状态，不包含平台细节。只有安全握手完成后，会话才进入 `established`。
-
-## 使用教程
-
-完整使用说明、场景分步指南、Flutter / C# 集成示例见 **[docs/USAGE_TUTORIAL.md](docs/USAGE_TUTORIAL.md)**。  
-Wintun 验证与远程 Linux/Windows 服务端对接见 **[docs/REMOTE_CONNECT.md](docs/REMOTE_CONNECT.md)**。
-
-## 构建
-
-需要 CMake 3.21+ 和支持 C++20 的编译器：
+## 测试
 
 ```powershell
-cmake -S . -B build
-cmake --build build --config Release
-ctest --test-dir build -C Release --output-on-failure
+cmake --build build
+ctest --test-dir build --output-on-failure
 ```
 
-本机已使用 Visual Studio 2026 的 MSVC、CMake 和 Ninja 完成编译。
+主要测试：`session_tests`、`inner_session_tests`、`data_plane_relay_tests`、`quic_handshake_tests`（Windows+MsQuic）、`smart_route_list_tests`、`wintun_loader_tests`。
 
-### 验证 Wintun（Windows）
+---
 
-```powershell
-# 普通权限：只验证 DLL 导出符号
-.\build\wintun_loader_tests.exe
+## 平台与限制
 
-# 管理员权限：创建适配器并启动会话（不改路由）
-.\build\wintun_probe.exe
+### 已验证
 
-# 客户端可选接入真实网卡
-.\build\tunnel_client.exe --wintun
-```
+- Windows 10/11 + MSVC：QUIC 握手、Wintun 创建、智能/全局 VPN 本机联调
+- Server 断线后持续监听（relay 循环 + 会话重置）
+
+### 已知限制
+
+1. **Linux QUIC**：CMake 仅在 Windows 自动链接 MsQuic；Linux 上 `--quic` 需自行集成 [MsQuic Linux 构建](https://github.com/microsoft/msquic) 后才能与 Windows 客户端互通。
+2. **Server 端口**：当前固定 `44333`，`sectunnel.env` 中的 `QUIC_PORT` 仅影响防火墙规则。
+3. **内层 PSK 默认空**：开发模式无 AEAD；生产应配置 `InnerSessionConfig::psk_hex`。
+4. **Windows Service / Named Pipe**：文档与示例草案已写，代码尚未实现。
+5. **远程 `--insecure`**：配置校验拒绝，必须使用受信任 TLS 证书。
+
+---
 
 ## 安全原则
 
-1. 禁止自行实现 AES、ChaCha20、X25519、随机数生成器或 TLS。
-2. 禁止重复 nonce；密钥和方向必须隔离。
-3. 默认禁用 0-RTT，直到服务端实现可靠的防重放策略。
-4. 不伪造第三方网站身份、证书或 SNI。
-5. 不在日志中保存密钥、完整数据包和用户内容。
-6. 当前 Wintun 实现 **故意不改默认路由**，避免半成品劫持整机流量。
+1. 不自行实现 AES、ChaCha20、X25519、TLS 等密码原语。
+2. 默认禁用 0-RTT，防止重放。
+3. `--insecure` 仅允许 `127.0.0.1` / `localhost`。
+4. 路由变更（全局/智能）仅在 QUIC 握手成功后应用；退出时自动清理。
+5. 不在日志中记录密钥或完整数据包内容。
 
-## Linux 服务端部署
+---
 
-参见 **[docs/LINUX_SERVER_DEPLOY.md](docs/LINUX_SERVER_DEPLOY.md)**：nftables NAT、TUN 配置、systemd 与证书说明。
+## 路线图
 
-```bash
-sudo deploy/linux/scripts/install.sh "$(pwd)"
-sudo /usr/local/lib/sectunnel/apply-nat.sh
-sudo systemctl enable --now sectunnel-server
-```
+- [ ] Linux MsQuic 集成（CMake + OpenSSL）
+- [ ] Server 可配置 `--port:`
+- [ ] 客户端 TLS 证书 pinning（`--cert_hash`）
+- [ ] Windows Service + Named Pipe（UI 集成）
+- [ ] 内层 WireGuard / Noise 生产实现
+- [ ] 性能基线（iperf3、丢包仿真）
 
-## 下一阶段
+---
 
-1. Linux 上完整集成 MsQuic（OpenSSL）与生产证书。
-2. 接入成熟的 Noise/WireGuard 内层，不编写自定义密码算法。
-3. Windows Service + Named Pipe，供 Flutter / C# UI 集成。
-4. 使用 `ping`、`iperf3`、丢包网络仿真做性能基线。
+## 第三方许可
+
+- [Wintun](https://www.wintun.net/) — WireGuard LLC
+- [MsQuic](https://github.com/microsoft/msquic) — MIT（Microsoft）
+
+---
+
+## 免责声明
+
+本项目仅供 **学习、研究与合法授权网络测试**。使用者须遵守当地法律法规，作者不对滥用行为负责。
